@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Calendar</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px; /* 限制最大宽度，让日历不会显得太宽 */
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            color: #333;
+            background-color: #f4f6f8; /* 给网页加个淡灰底色，为了让白色的格子阴影更明显 */
+        }
+        .upload-area {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #b0bec5;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+        
+        /* 每一个月份的外层容器 */
+        .month-section {
+            margin-top: 40px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); /* 整个月份卡片的阴影 */
+        }
+
+        .month-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        /* 日历网格布局：固定 7 列 */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 24px; /* 格子之间的间距 */
+        }
+
+        /* 星期几的表头 */
+        .weekday-header {
+            font-weight: bold;
+            color: #7f8c8d;
+            padding-bottom: 16px;
+        }
+
+        /* 核心：每一个日历小格子 */
+        .day-box {
+            aspect-ratio: 1 / 1; /* 神奇的一行代码：强制元素为正方形 */
+            background-color: #fafafa;
+            border-radius: 40px;
+            position: relative;
+            overflow: hidden;
+            /* 添加你想要的阴影效果 */
+            box-shadow: 0 3px 6px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* 鼠标悬浮在格子上时的浮动效果 */
+        .day-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+        }
+
+        /* 空白格子（当月没有日期的占位符）去阴影和背景 */
+        .day-box.empty {
+            background-color: transparent;
+            box-shadow: none;
+        }
+
+        /* 内层填充：代表实际学习时间 */
+        .box-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            transition: height 0.8s ease, background-color 0.5s ease; 
+        }
+
+        /* 左上角的日期数字 */
+        .day-number {
+            position: absolute;
+            top: 16px;
+            left: 18px;
+            font-size: 16px;
+            color: #95a5a6;
+            z-index: 10;
+        }
+
+        /* 居中显示的小时数 */
+        .hours-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            z-index: 10;
+            text-shadow: 0 0 4px rgba(255,255,255,0.9);
+        }
+    </style>
+</head>
+<body>
+
+<h1>📅 学习日历时间墙</h1>
+    
+    <div class="upload-area">
+        <label for="fileInput"><strong>上传你的学习记录 (.json): </strong></label>
+        <input type="file" id="fileInput" accept=".json">
+    </div>
+
+    <div id="calendars-container"></div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const jsonData = JSON.parse(e.target.result);
+                    processAndRenderCalendar(jsonData);
+                } catch (error) {
+                    alert('文件解析失败，请确保上传的是有效的 JSON 文件！');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        function processAndRenderCalendar(data) {
+            const dailyStats = {};
+
+            // --- 核心修改区：跨夜修正逻辑 ---
+            data.forEach(item => {
+                // 1. 从 "2026-03-18T11:46:51+02:00" 中拆分出日期和时间
+                const [datePart, timePart] = item.date.split('T');
+                
+                // 2. 提取出小时数 (例如 "11:46:51" 提取出 11)
+                const hour = parseInt(timePart.split(':')[0], 10);
+                
+                let logicalDateStr = datePart; // 默认使用当天的日期
+
+                // 3. 判断：如果时间早于 14:00，就算作昨天
+                if (hour < 14) {
+                    const d = new Date(datePart); 
+                    d.setUTCDate(d.getUTCDate() - 1); // 日期往前推一天
+                    logicalDateStr = d.toISOString().split('T')[0]; // 重新格式化回 YYYY-MM-DD
+                }
+
+                const hours = item.duration / 3600;
+                
+                // 4. 将时间累加到修正后的“逻辑日期”上
+                dailyStats[logicalDateStr] = (dailyStats[logicalDateStr] || 0) + hours;
+            });
+            // --- 修改区结束 ---
+
+            const monthsSet = new Set(Object.keys(dailyStats).map(date => date.substring(0, 7)));
+            const sortedMonths = Array.from(monthsSet).sort();
+
+            const container = document.getElementById('calendars-container');
+            container.innerHTML = ''; 
+            const TARGET_HOURS = 8; 
+
+            sortedMonths.forEach(monthStr => {
+                const [year, month] = monthStr.split('-').map(Number);
+                
+                const monthSection = document.createElement('div');
+                monthSection.className = 'month-section';
+                monthSection.innerHTML = `<div class="month-title">${year}年 ${month}月</div>`;
+
+                const gridDiv = document.createElement('div');
+                gridDiv.className = 'calendar-grid';
+
+                const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+                weekdays.forEach(wd => {
+                    const wdEl = document.createElement('div');
+                    wdEl.className = 'weekday-header';
+                    wdEl.textContent = wd;
+                    gridDiv.appendChild(wdEl);
+                });
+
+                const firstDay = new Date(year, month - 1, 1);
+                let startOffset = firstDay.getDay() - 1; 
+                if (startOffset === -1) startOffset = 6; 
+
+                const daysInMonth = new Date(year, month, 0).getDate();
+
+                for (let i = 0; i < startOffset; i++) {
+                    const blank = document.createElement('div');
+                    blank.className = 'day-box empty';
+                    gridDiv.appendChild(blank);
+                }
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const hours = dailyStats[dateKey] || 0;
+
+                    const dayBox = document.createElement('div');
+                    dayBox.className = 'day-box';
+
+                    // let fillPercentage = (hours / TARGET_HOURS) * 100;
+                    /*if (fillPercentage > 100) fillPercentage = 100; */
+                    let fillPercentage =  100;
+                    let fillColor = '';
+                    if (hours === 0) {
+                        fillColor = '#f0f2f5'; 
+                    } else if (hours < 2) {
+                        fillColor = '#aceebb'; 
+                    } else if (hours < 4) {
+                        fillColor = '#4ac36b'; 
+                    } else if (hours < 6) {
+                        fillColor = '#2ea44e'; 
+                    } else {
+                        fillColor = '#126429'; 
+                    }
+
+                    const hoursTextHtml = hours > 0 ? `<div class="hours-text">${hours.toFixed(1)}h</div>` : '';
+
+                    dayBox.innerHTML = `
+                        <div class="day-number">${day}</div>
+                        <div class="box-fill" style="height: ${fillPercentage}%; background-color: ${fillColor};"></div>
+                        ${hoursTextHtml}
+                    `;
+                    gridDiv.appendChild(dayBox);
+                }
+
+                monthSection.appendChild(gridDiv);
+                container.appendChild(monthSection);
+            });
+        }
+    </script>
+</body>
+</html>
