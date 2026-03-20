@@ -111,7 +111,7 @@
 </head>
 <body>
 
-<h1>📅 学习日历时间墙</h1>
+<h1>📅 Study Calendar</h1>
     
     <div id="calendars-container">
         <h3 id="loading-text">🔄 正在自动读取数据中...</h3>
@@ -183,7 +183,7 @@
                 const gridDiv = document.createElement('div');
                 gridDiv.className = 'calendar-grid';
 
-                const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+                const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 weekdays.forEach(wd => {
                     const wdEl = document.createElement('div');
                     wdEl.className = 'weekday-header';
